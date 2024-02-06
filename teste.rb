@@ -8,16 +8,26 @@ mongo_client = Mongo::Client.new(['localhost:27017'], :database => 'scraping_db'
 collection = mongo_client[:scraped_data]
 
 def scrape_similarweb(url)
-  similarweb_api_url = "https://api.similarweb.com/v1/website/#{URI.escape(url)}/total-traffic-and-engagement"
-  api_key = 'SUA_CHAVE_DE_API_SIMILARWEB'
+  similarweb_api_url = "https://api.similarweb.com/v1/website/#{URI.escape(url)}/detailed"
+  api_key = 'ddf1b2a1c5a44856ae4cdfc5657720d3'
 
   response = RestClient.get(similarweb_api_url, headers: { 'Api-Key' => api_key })
   data = JSON.parse(response.body)
 
-  {
-    'visits' => data['visits'],
-    'page_views' => data['page_views']
+  detailed_data = {
+    'classification' => data['meta']['classification'],
+    'site' => data['meta']['site'],
+    'category' => data['meta']['category'],
+    'ranking_change' => data['meta']['ranking_change'],
+    'average_visit_duration' => data['engagement']['average_visit_duration'],
+    'pages_per_visit' => data['engagement']['pages_per_visit'],
+    'bounce_rate' => data['engagement']['bounce_rate'],
+    'top_countries' => data['geography']['top_countries'],
+    'gender_distribution' => data['demographics']['gender_distribution'],
+    'age_distribution' => data['demographics']['age_distribution']
   }
+
+  detailed_data
 end
 
 post '/salve_info' do
@@ -27,7 +37,6 @@ post '/salve_info' do
 
   begin
     similarweb_data = scrape_similarweb(url)
-
     data = {
       'url' => url,
       'similarweb_data' => similarweb_data
