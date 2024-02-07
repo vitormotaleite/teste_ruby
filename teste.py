@@ -8,8 +8,6 @@ client = MongoClient('mongodb://localhost:27017/')
 db = client['web_scraping_db']
 collection = db['web_data']
 
-similarweb_api_key = 'ddf1b2a1c5a44856ae4cdfc5657720d3'
-
 @app.route('/salve_info', methods=['POST'])
 def scrape_and_save_info():
     data = request.get_json()
@@ -18,7 +16,7 @@ def scrape_and_save_info():
     if not url:
         return jsonify({'error': 'URL not provided'}), 400
 
-    similarweb_url = f"https://api.similarweb.com/v1/website/{url}/total-traffic-and-engagement?api_key={similarweb_api_key}"
+    similarweb_url = f'https://www.similarweb.com/website/{url}/'
     response = requests.get(similarweb_url)
     similarweb_data = response.json()
 
