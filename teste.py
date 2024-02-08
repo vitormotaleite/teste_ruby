@@ -1,58 +1,62 @@
-from flask import Flask, jsonify, request
 import requests
+from bs4 import BeautifulSoup
 from pymongo import MongoClient
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-client = MongoClient('mongodb://localhost:27017/')
-db = client['web_scraping_db']
-collection = db['web_data']
+mongo_client = MongoClient('mongodb://localhost:27017/')
+db = mongo_client['similarweb']
+collection = db['website_data']
+
+def scrape_similarweb(website_url):
+    website_url = input()
+    url = f'https://www.similarweb.com/website/{website_url}'
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    title = soup.find('title').text
+    category = soup.find('span', class_='websiteCategory').text
+    global_rank = soup.find('span', class_='globalRank').text
+    traffic_country = soup.find('div', class_='trafficCountry')
+    top_countries = [country.text for country in traffic_country.find_all('div', class_='countryName')]
+
+
+    data = {
+        'website_url': website_url,
+        'title': title,
+        'category': category,
+        'global_rank': global_rank,
+        'top_countries': top_countries,
+    }
+    return data
 
 @app.route('/salve_info', methods=['POST'])
-def scrape_and_save_info():
-    data = request.get_json()
-    url = data.get('url')
+def save_info():
+    website_url = request.json.get('website_url')
 
-    if not url:
-        return jsonify({'error': 'URL not provided'}), 400
+    if not website_url:
+        return jsonify({'error': 'URL do site ausente na solicitação'}), 400
 
-    similarweb_url = f'https://www.similarweb.com/website/{url}/'
-    response = requests.get(similarweb_url)
-    similarweb_data = response.json()
+    data = scrape_similarweb(website_url)
 
-    if 'error' in similarweb_data:
-        return jsonify({'error': similarweb_data['error']['message']}), 400
+    collection.insert_one(data)
 
-    data_entry = {
-        'website': url,
-        'classification': similarweb_data.get('CategoryRank'),
-        'category': similarweb_data.get('Category'),
-        'change_in_ranking': similarweb_data.get('ChangeinRank'),
-        'average_visit_duration': similarweb_data.get('AverageVisitDuration'),
-        'pages_per_visit': similarweb_data.get('PagesPerVisit'),
-        'bounce_rate': similarweb_data.get('BounceRate'),
-        'top_countries': similarweb_data.get('TopCountryShares'),
-        'gender_distribution': similarweb_data.get('GenderDistribution'),
-        'age_distribution': similarweb_data.get('AgeDistribution'),
-    }
-    collection.insert_one(data_entry)
-
-    return jsonify({'result': 'success', 'data': data_entry})
+    return jsonify({'message': 'Scraping e armazenamento concluídos com sucesso!'})
 
 @app.route('/get_info', methods=['POST'])
 def get_info():
-    data = request.get_json()
-    url = data.get('url')
+    website_url = request.json.get('website_url')
 
-    if not url:
-        return jsonify({'error': 'URL not provided'}), 400
+    if not website_url:
+        return jsonify({'error': 'URL do site ausente na solicitação'}), 400
 
-    result = collection.find_one({'website': url})
+    data = collection.find_one({'website_url': website_url})
 
-    if result:
-        return jsonify({'result': 'success', 'data': result})
+    if data:
+        return jsonify(data)
     else:
-        return jsonify({'error': 'Data not found'}), 404
+        return jsonify({'error': 'Informações não encontradas no banco de dados'}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
