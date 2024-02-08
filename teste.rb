@@ -1,64 +1,80 @@
 require 'sinatra'
-require 'sinatra/json'
 require 'nokogiri'
-require 'open-uri'
 require 'mongo'
+require 'open-uri'
 
 configure do
-  set :mongo_uri, 'mongodb://localhost:27017/similarweb'
-  enable :sessions
+  set :mongo_uri, 'mongodb://localhost:27017/'
 end
 
-mongo_client = Mongo::Client.new(settings.mongo_uri)
-db = mongo_client.database
-
-collection = db['website_data']
-
-def scrape_similarweb(website_url)
-  url = "https://www.similarweb.com/website/#{website_url}"
-  doc = Nokogiri::HTML(URI.open(url))
-
-  title = doc.at('title').text
-  category = doc.at('.websiteCategory').text
-  global_rank = doc.at('.globalRank').text
-  traffic_country = doc.at('.trafficCountry')
-  top_countries = traffic_country.css('.countryName').map(&:text)
-
-  {
-    'website_url' => website_url,
-    'title' => title,
-    'category' => category,
-    'global_rank' => global_rank,
-    'top_countries' => top_countries
-  }
+before do
+  content_type :json
 end
 
 post '/salve_info' do
-  website_url = JSON.parse(request.body.read)['website_url']
+  url = params[:url]
+  # Realizar scraping dos dados do SimilarWeb
+  scraped_data = scrape_similarweb(url)
 
-  if website_url.nil? || website_url.empty?
-    status 400
-    json(error: 'URL do site ausente na solicitação')
+  if scraped_data
+    # Salvar as informações no MongoDB
+    save_to_mongodb(scraped_data)
+    { status: 'success', message: 'Informações salvas com sucesso.' }.to_json
   else
-    data = scrape_similarweb(website_url)
-    collection.insert_one(data)
-    json(message: 'Scraping e armazenamento concluídos com sucesso!')
+    status 500
+    { status: 'error', message: 'Erro ao obter informações do SimilarWeb.' }.to_json
   end
 end
 
 post '/get_info' do
-  website_url = JSON.parse(request.body.read)['website_url']
+  url = params[:url]
 
-  if website_url.nil? || website_url.empty?
-    status 400
-    json(error: 'URL do site ausente na solicitação')
+  # Buscar as informações no banco de dados MongoDB
+  stored_data = get_from_mongodb(url)
+
+  if stored_data
+    stored_data.to_json
   else
-    data = collection.find('website_url' => website_url).first
-    if data
-      json(data)
-    else
-      status 404
-      json(error: 'Informações não encontradas no banco de dados')
-    end
+    status 404
+    { status: 'error', message: 'Informações não encontradas.' }.to_json
   end
+end
+
+def scrape_similarweb(url)
+  similarweb_url = "https://www.similarweb.com/website/#{url}"
+
+  begin
+    html = open(similarweb_url)
+    doc = Nokogiri::HTML(html)
+  rescue OpenURI::HTTPError => e
+    puts "Erro ao acessar a página: #{e.message}"
+    return nil
+  end
+
+  data = {}
+
+  data[:url] = url
+  data[:classificacao] = doc.at_css('.websiteRanks span').text.strip
+  data[:site] = doc.at_css('.websiteHeader-title').text.strip
+  data[:categoria] = doc.at_css('.websiteCategory span').text.strip
+  data[:mudanca_ranking] = doc.at_css('.rankingInfo-websiteRankChange span').text.strip
+  data[:duracao_media_visita] = doc.at_css('.engagementInfo-number:first-child').text.strip
+  data[:paginas_por_visita] = doc.at_css('.engagementInfo-number:nth-child(2)').text.strip
+  data[:taxa_rejeicao] = doc.at_css('.engagementInfo-number:last-child').text.strip
+
+  # Adicione código para extrair outras informações conforme necessário
+
+  return data
+end
+
+def save_to_mongodb(data)
+  client = Mongo::Client.new(settings.mongo_uri)
+  collection = client[:similarweb_data]
+  collection.insert_one(data)
+end
+
+def get_from_mongodb(url)
+  client = Mongo::Client.new(settings.mongo_uri)
+  collection = client[:similarweb_data]
+  collection.find(url: url).first
 end
