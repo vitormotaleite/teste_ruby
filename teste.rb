@@ -9,14 +9,11 @@ configure do
   enable :sessions
 end
 
-# Conecta ao MongoDB
 mongo_client = Mongo::Client.new(settings.mongo_uri)
 db = mongo_client.database
 
-# Define a coleção
 collection = db['website_data']
 
-# Função para realizar o scraping
 def scrape_similarweb(website_url)
   url = "https://www.similarweb.com/website/#{website_url}"
   doc = Nokogiri::HTML(URI.open(url))
@@ -36,7 +33,6 @@ def scrape_similarweb(website_url)
   }
 end
 
-# Rota para salvar informações
 post '/salve_info' do
   website_url = JSON.parse(request.body.read)['website_url']
 
@@ -50,7 +46,6 @@ post '/salve_info' do
   end
 end
 
-# Rota para obter informações
 post '/get_info' do
   website_url = JSON.parse(request.body.read)['website_url']
 
