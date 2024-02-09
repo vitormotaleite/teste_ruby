@@ -1,80 +1,89 @@
 require 'sinatra'
 require 'nokogiri'
-require 'mongo'
 require 'open-uri'
+require 'mongo'
 
 configure do
-  set :mongo_uri, 'mongodb://localhost:27017/'
+  enable :sessions
+  set :mongo_uri, 'mongodb://localhost:27017/similarweb_scraper'
 end
 
 before do
-  content_type :json
+  content_type 'application/json'
 end
 
 post '/salve_info' do
   url = params[:url]
-  # Realizar scraping dos dados do SimilarWeb
-  scraped_data = scrape_similarweb(url)
+  halt 400, { error: 'URL is required' }.to_json unless url
 
-  if scraped_data
-    # Salvar as informações no MongoDB
-    save_to_mongodb(scraped_data)
-    { status: 'success', message: 'Informações salvas com sucesso.' }.to_json
-  else
-    status 500
-    { status: 'error', message: 'Erro ao obter informações do SimilarWeb.' }.to_json
-  end
+  scraped_data = scrape_similarweb(url)
+  save_to_mongo(url, scraped_data)
+
+  { message: 'Data saved successfully' }.to_json
 end
 
 post '/get_info' do
   url = params[:url]
+  halt 400, { error: 'URL is required' }.to_json unless url
 
-  # Buscar as informações no banco de dados MongoDB
-  stored_data = get_from_mongodb(url)
+  data = retrieve_from_mongo(url)
+  halt 404, { error: 'Data not found' }.to_json unless data
 
-  if stored_data
-    stored_data.to_json
-  else
-    status 404
-    { status: 'error', message: 'Informações não encontradas.' }.to_json
-  end
+  data.to_json
 end
 
 def scrape_similarweb(url)
-  similarweb_url = "https://www.similarweb.com/website/#{url}"
-
   begin
-    html = open(similarweb_url)
-    doc = Nokogiri::HTML(html)
-  rescue OpenURI::HTTPError => e
-    puts "Erro ao acessar a página: #{e.message}"
-    return nil
+    page = Nokogiri::HTML(open("https://www.similarweb.com/website/#{url}"))
+
+    classification = page.xpath('//*[@id="overview"]/div/div/div/div[3]/div/div[1]/div/p').text.strip
+    site = page.xpath('//*[@id="overview"]/div/div/div/div[1]/p[2]').text.strip
+    category = page.xpath('//*[@id="overview"]/div/div/div/div[5]/div/dl/div[6]/dd/a').text.strip
+    ranking_change = page.xpath('//*[@id="overview"]/div/div/div/div[3]/div/div[1]/div/span').text.strip
+    average_visit_duration = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[4]/p[2]').first.text.strip
+    pages_per_visit = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[3]/p[2]').last.text.strip
+    bounce_rate = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[2]/p[2]').text.strip
+
+    {
+      classification: classification,
+      site: site,
+      category: category,
+      ranking_change: ranking_change,
+      average_visit_duration: average_visit_duration,
+      pages_per_visit: pages_per_visit,
+      bounce_rate: bounce_rate
+    }
+
+  rescue StandardError => e
+    puts "Erro ao fazer scraping: #{e.message}"
+    {
+      classification: '',
+      site: '',
+      category: '',
+      ranking_change:'',
+      average_visit_duration: '',
+      pages_per_visit: '',
+      bounce_rate: ''
+    }
   end
-
-  data = {}
-
-  data[:url] = url
-  data[:classificacao] = doc.at_css('.websiteRanks span').text.strip
-  data[:site] = doc.at_css('.websiteHeader-title').text.strip
-  data[:categoria] = doc.at_css('.websiteCategory span').text.strip
-  data[:mudanca_ranking] = doc.at_css('.rankingInfo-websiteRankChange span').text.strip
-  data[:duracao_media_visita] = doc.at_css('.engagementInfo-number:first-child').text.strip
-  data[:paginas_por_visita] = doc.at_css('.engagementInfo-number:nth-child(2)').text.strip
-  data[:taxa_rejeicao] = doc.at_css('.engagementInfo-number:last-child').text.strip
-
-  # Adicione código para extrair outras informações conforme necessário
-
-  return data
 end
 
-def save_to_mongodb(data)
+def save_to_mongo(url, data)
+
   client = Mongo::Client.new(settings.mongo_uri)
-  collection = client[:similarweb_data]
-  collection.insert_one(data)
+  collection = client[:websites]
+
+  existing_data = collection.find(url: url).first
+  if existing_data
+    collection.update_one({ _id: existing_data['_id'] }, '$set' => data)
+  else
+    collection.insert_one(data.merge(url: url))
+  end
 end
 
-def get_from_mongodb(url)
+def retrieve_from_mongo(url)
   client = Mongo::Client.new(settings.mongo_uri)
-  collection = client[:similarweb_data]
+  collection = client[:websites]
+
   collection.find(url: url).first
 end
