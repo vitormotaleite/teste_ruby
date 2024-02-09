@@ -48,6 +48,10 @@ def similarweb_scrape(url)
     tempo_medio_visita = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[4]/p[2]').first.text.strip
     paginas_por_visita = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[3]/p[2]').last.text.strip
     taxa_rejeicao = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[2]/p[2]').text.strip
+    principais_paises= page.xpath('//*[@id="geography"]/div/div/div[2]/div[2]/div').text.strip
+    distribuicao_genero = page.xpath('//*[@id="demographics"]/div/div/div[2]/div[2]/ul').text.strip
+    distribuicao_idade = page.xpath('//*[@id="demographics"]/div/div/div[2]/div[1]').text.strip
+
     
     driver.quit
 
@@ -58,7 +62,10 @@ def similarweb_scrape(url)
       mudanca_rank: mudanca_rank,
       tempo_medio_visita: tempo_medio_visita,
       paginas_por_visita: paginas_por_visita,
-      taxa_rejeicao: taxa_rejeicao
+      taxa_rejeicao: taxa_rejeicao,
+      principais_paises: principais_paises,
+      distribuicao_genero: distribuicao_genero,
+      distribuicao_idade: distribuicao_idade
     }
 
   rescue StandardError => e
@@ -70,7 +77,10 @@ def similarweb_scrape(url)
       mudanca_rank:'',
       tempo_medio_visita: '',
       paginas_por_visita: '',
-      taxa_rejeicao: ''
+      taxa_rejeicao: '',
+      principais_paises: '',
+      distribuicao_genero: '',
+      distribuicao_idade: ''
     }
   end
 end
