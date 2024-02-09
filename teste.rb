@@ -2,6 +2,7 @@ require 'sinatra'
 require 'nokogiri'
 require 'open-uri'
 require 'mongo'
+require 'selenium-webdriver'
 
 configure do
   enable :sessions
@@ -34,7 +35,10 @@ end
 
 def scrape_similarweb(url)
   begin
-    page = Nokogiri::HTML(open("https://www.similarweb.com/website/#{url}"))
+    driver = Selenium::WebDriver.for :chrome
+    driver.get("https://www.similarweb.com/website/#{url}")
+    sleep(5)
+    page = Nokogiri::HTML(driver.page_source)
 
     classification = page.xpath('//*[@id="overview"]/div/div/div/div[3]/div/div[1]/div/p').text.strip
     site = page.xpath('//*[@id="overview"]/div/div/div/div[1]/p[2]').text.strip
@@ -43,6 +47,8 @@ def scrape_similarweb(url)
     average_visit_duration = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[4]/p[2]').first.text.strip
     pages_per_visit = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[3]/p[2]').last.text.strip
     bounce_rate = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[2]/p[2]').text.strip
+    
+    driver.quit
 
     {
       classification: classification,
