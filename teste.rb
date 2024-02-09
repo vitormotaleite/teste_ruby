@@ -4,6 +4,7 @@ require 'open-uri'
 require 'mongo'
 require 'selenium-webdriver'
 
+
 configure do
   enable :sessions
   set :mongo_uri, 'mongodb://localhost:27017/similarweb_scraper'
@@ -15,25 +16,25 @@ end
 
 post '/salve_info' do
   url = params[:url]
-  halt 400, { error: 'URL is required' }.to_json unless url
+  halt 400, { error: 'URL e necessario' }.to_json unless url
 
-  data = scrape_similarweb(url)
-  save_to_mongo(url, data)
+  data = similarweb_scrape(url)
+  slavar(url, data)
 
-  { message: 'Data saved successfully' }.to_json
+  { message: 'Data salva com sucesso' }.to_json
 end
 
 post '/get_info' do
   url = params[:url]
-  halt 400, { error: 'URL is required' }.to_json unless url
+  halt 400, { error: 'URL e necessario' }.to_json unless url
 
-  data = retrieve_from_mongo(url)
-  halt 404, { error: 'Data not found' }.to_json unless data
+  data = pegar(url)
+  halt 404, { error: 'Data nao encontrada' }.to_json unless data
 
   data.to_json
 end
 
-def scrape_similarweb(url)
+def similarweb_scrape(url)
   begin
     driver = Selenium::WebDriver.for :chrome
     driver.get("https://www.similarweb.com/website/#{url}")
@@ -45,7 +46,7 @@ def scrape_similarweb(url)
     categoria = page.xpath('//*[@id="overview"]/div/div/div/div[5]/div/dl/div[6]/dd/a').text.strip
     mudanca_rank = page.xpath('//*[@id="overview"]/div/div/div/div[3]/div/div[1]/div/span').text.strip
     tempo_medio_visita = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[4]/p[2]').first.text.strip
-    pages_per_visit = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[3]/p[2]').last.text.strip
+    paginas_por_visita = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[3]/p[2]').last.text.strip
     taxa_rejeicao = page.xpath('//*[@id="overview"]/div/div/div/div[4]/div[2]/div[2]/p[2]').text.strip
     
     driver.quit
@@ -56,7 +57,7 @@ def scrape_similarweb(url)
       categoria: categoria,
       mudanca_rank: mudanca_rank,
       tempo_medio_visita: tempo_medio_visita,
-      pages_per_visit: pages_per_visit,
+      paginas_por_visita: paginas_por_visita,
       taxa_rejeicao: taxa_rejeicao
     }
 
@@ -68,13 +69,13 @@ def scrape_similarweb(url)
       categoria: '',
       mudanca_rank:'',
       tempo_medio_visita: '',
-      pages_per_visit: '',
+      paginas_por_visita: '',
       taxa_rejeicao: ''
     }
   end
 end
 
-def save_to_mongo(url, data)
+def slavar(url, data)
 
   cliente = Mongo::Client.new(settings.mongo_uri)
   colecao = cliente[:websites]
@@ -87,7 +88,7 @@ def save_to_mongo(url, data)
   end
 end
 
-def retrieve_from_mongo(url)
+def pegar(url)
   cliente = Mongo::Client.new(settings.mongo_uri)
   colecao = cliente[:websites]
 
